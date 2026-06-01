@@ -1,2 +1,2 @@
-# wifi-strength-surveyor
-A utility to survey strength of wifi in various parts of establishment.
+# RIFT
+RIFT — RF Intelligence & Threat Framework
