@@ -1,0 +1,21 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Release keystore — NEVER commit this
+release.keystore
+*.jks
+*.keystore
+
+# APK outputs
+app/build/
+
+# Generated files
+app/src/main/assets/
