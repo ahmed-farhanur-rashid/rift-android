@@ -2,6 +2,10 @@
 
 An Android application for indoor RF environment mapping with on-device ML-powered threat analysis.
 
+![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?logo=kotlin&logoColor=white) ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white) ![Gradle](https://img.shields.io/badge/build-Gradle-02303A?logo=gradle&logoColor=white) ![Android](https://img.shields.io/badge/Android-API%2029%2B-3DDC84?logo=android&logoColor=white) ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white) ![Hilt](https://img.shields.io/badge/DI-Hilt-brightgreen) ![Room](https://img.shields.io/badge/DB-Room-orange) ![ONNX Runtime](https://img.shields.io/badge/ML-ONNX%20Runtime-005CED?logo=onnx&logoColor=white) ![OkHttp](https://img.shields.io/badge/Network-OkHttp-green) ![GitHub Actions](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white) ![License](https://img.shields.io/badge/license-MIT-brightgreen) ![Version](https://img.shields.io/badge/version-1.0.0-blue)
+
+---
+
 ## What it does
 
 RIFT combines pedestrian dead-reckoning (PDR) indoor positioning with passive WiFi scanning to build spatial heatmaps of signal strength and RF risk. While walking a floor plan, the app collects WiFi scan data at each position, renders a live heatmap overlay on a blueprint, and runs a **Mixture-of-Experts (MoE)** ML pipeline to surface security observations about the RF environment.
