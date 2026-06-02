@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Background circle -->
+    <path
+        android:fillColor="#0D1117"
+        android:pathData="M0,0H108V108H0Z" />
+    <!-- WiFi waves -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M20,44L26,50C38.9,37.1 69.1,37.1 82,50L88,44C71.8,27.8 36.2,27.8 20,44Z" />
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M31,55L37,61C43.4,54.6 64.6,54.6 71,61L77,55C67.5,45.5 40.5,45.5 31,55Z" />
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M43,67L54,78L65,67C59.5,61.5 48.5,61.5 43,67Z" />
+</vector>

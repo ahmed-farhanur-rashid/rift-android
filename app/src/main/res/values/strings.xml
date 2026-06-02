@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RIFT</string>
+    <string name="notification_channel_name">WiFi Scan Session</string>
+    <string name="notification_channel_desc">Shows scan progress while you walk</string>
+    <string name="permission_location_rationale">Location permission is required to scan WiFi networks. Android requires this because WiFi SSIDs can reveal your location.</string>
+    <string name="permission_activity_rationale">Activity recognition is required to detect your steps for indoor positioning.</string>
+    <string name="stop_scan">Stop</string>
+    <string name="start_scan">Start Scanning</string>
+</resources>

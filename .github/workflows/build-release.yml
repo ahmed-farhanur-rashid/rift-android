@@ -1,0 +1,219 @@
+name: Build & Release APK
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub release'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '17'
+  GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError"
+
+jobs:
+  # ─── 1. Unit Tests ────────────────────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: app/build/reports/tests/
+          retention-days: 7
+
+  # ─── 2. Debug APK (PRs and pushes to main) ───────────────────────────────────
+  build-debug:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rift-debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+  # ─── 3. Release APK (tags only) ──────────────────────────────────────────────
+  build-release:
+    name: Build Signed Release APK
+    runs-on: ubuntu-latest
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Decode keystore from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+          echo "Keystore decoded: $(ls -la release.keystore)"
+
+      - name: Build release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Verify APK signature
+        run: |
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          echo "Built APK: $APK"
+          $JAVA_HOME/bin/jarsigner -verify -verbose "$APK" | tail -5
+
+      - name: Rename APK with version
+        run: |
+          VERSION="${{ github.ref_name }}"
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          mv "$APK" "app/build/outputs/apk/release/rift-${VERSION}.apk"
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rift-release
+          path: app/build/outputs/apk/release/rift-*.apk
+          retention-days: 90
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f release.keystore
+
+  # ─── 4. Create GitHub Release ────────────────────────────────────────────────
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: rift-release
+          path: release/
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## RIFT ${{ github.ref_name }}
+
+          ### Installation
+          1. Download `rift-${{ github.ref_name }}.apk` below
+          2. On your Android device, go to **Settings → Security → Install unknown apps**
+          3. Allow installation from your browser or file manager
+          4. Open the downloaded APK and tap **Install**
+
+          > **Minimum Android version:** Android 10 (API 29)
+
+          ### Requirements
+          Grant these permissions when prompted:
+          - **Location** — required by Android to read WiFi scan results
+          - **Physical activity** — for step detection (indoor positioning)
+          - **Notifications** — for the foreground scanning service
+
+          ### Known limitations
+          - PDR heading accuracy degrades near large metal appliances or rebar
+          - Use the 📌 **Anchor** button at room boundaries to correct drift
+          - Some manufacturer ROMs (Xiaomi, older Samsung) may require disabling battery optimization for the app
+
+          ### What's included
+          - Continuous WiFi scanning while you walk
+          - Pedestrian Dead Reckoning (step + heading → indoor position)
+          - Color-coded heatmap overlay on your floor plan
+          - Per-AP heatmap filtering (compare 2.4 GHz vs 5 GHz coverage)
+          - Session history with Room database persistence
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "RIFT ${{ github.ref_name }}"
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-rc') }}
+          files: |
+            release/rift-*.apk
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
