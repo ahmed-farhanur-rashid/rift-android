@@ -21,7 +21,10 @@ venv/
 .venv/
 .vscode/
 .kotlin/
-.gradle
+.gradle/
+
+# Java heap dumps — NEVER commit these
+*.hprof
 
 # AWID3 raw dataset (academic use only — do not commit)
 /ml/dataset/awid3/
