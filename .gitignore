@@ -3,7 +3,6 @@
 /local.properties
 /.idea/
 .DS_Store
-/build
 /captures
 .externalNativeBuild
 .cxx
@@ -14,23 +13,20 @@ release.keystore
 *.jks
 *.keystore
 
-# APK outputs
-app/build/
-
-# Generated files
-app/src/main/assets/
+# Build outputs
+/build
+/app/build/
 
 # Virtual environment
 venv/
 .venv/
 
-# AWID3 real dataset (academic use only — do not commit)
-ml/dataset/awid3/
-ml/training/awid3_*.csv
+# AWID3 raw dataset (academic use only — do not commit)
+/ml/dataset/awid3/
 
-# ML training artifacts
-ml/training/venv/
-ml/training/*.pkl
-ml/training/*.onnx
-ml/training/*.pt
+# ML intermediate training artifacts (NOT the final models in assets/)
+/ml/training/awid3_*.csv
+/ml/training/*.pkl
+/ml/training/*.onnx
+/ml/training/*.pt
 __pycache__/

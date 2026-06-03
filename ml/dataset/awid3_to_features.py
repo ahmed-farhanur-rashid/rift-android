@@ -33,9 +33,9 @@ from collections import defaultdict
 
 import numpy as np
 
-SCRIPT_DIR = Path(__file__).parent
-DATASET_DIR = SCRIPT_DIR.parent / "dataset" / "awid3"
-OUTPUT_FILE = SCRIPT_DIR / "awid3_evil_twin_features.csv"
+SCRIPT_DIR = Path(__file__).parent  # ml/dataset/
+DATASET_DIR = SCRIPT_DIR / "awid3"  # ml/dataset/awid3/
+OUTPUT_FILE = SCRIPT_DIR.parent / "training" / "awid3_evil_twin_features.csv"  # ml/training/
 
 SSID_CANDIDATES = ["wlan.ssid", "ssid", "wlan_mgt.ssid", "dot11.wlan.ssid"]
 BSSID_CANDIDATES = ["wlan.sa", "wlan.bssid", "bssid", "wlan.ta", "dot11.wlan.sa"]
