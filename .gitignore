@@ -28,5 +28,6 @@ venv/
 /ml/training/awid3_*.csv
 /ml/training/*.pkl
 /ml/training/*.onnx
+/ml/training/*.onnx.data
 /ml/training/*.pt
 __pycache__/
