@@ -1,57 +1,35 @@
 #!/usr/bin/env python3
 """
-AWID3 -> RIFT Feature Converter
-================================
-Converts raw AWID3 evil twin capture data into the 5-feature format
+AWID3 -> RIFT Evil Twin Feature Converter
+==========================================
+Converts raw AWID3 packet-level CSV captures into the 5-feature format
 expected by 01_evil_twin_train.py.
 
-AWID3 has 254 packet-level features. This script groups packets by BSSID,
-identifies AP pairs sharing the same SSID, and computes:
+AWID3 evil twin captures contain raw 802.11 frames with 254 columns.
+This script:
+  1. Groups packets by BSSID to build per-AP summaries
+  2. Identifies AP pairs sharing the same SSID (evil twin pattern)
+  3. Computes the 5 ML features for each pair
+  4. Adds synthetic legitimate-pair negatives for balanced training
 
-  [0] bssid_similarity   Levenshtein(mac_A, mac_B) / 17, range [0,1]
-  [1] oui_match          1 if same OUI prefix, 0 if not
-  [2] encryption_delta   |encScore_A - encScore_B|
-  [3] rssi_diff          |rssi_A - rssi_B| / 65, range [0,1]
-  [4] band_mismatch      1 if different bands, 0 if same
-  [5] label              0 = legitimate pair, 1 = evil twin pair
+Output columns:
+  bssid_similarity, oui_match, encryption_delta, rssi_diff, band_mismatch, label
 
 Usage:
+  cd ml/dataset
   python awid3_to_features.py
-
-Input:
-  ml/dataset/awid3/Evil_Twin.csv  (and optionally Normal.csv)
-
-Output:
-  ml/training/awid3_evil_twin_features.csv
 """
 
 import sys
 import csv
-import os
 from pathlib import Path
 from collections import defaultdict
 
 import numpy as np
 
-SCRIPT_DIR = Path(__file__).parent  # ml/dataset/
-DATASET_DIR = SCRIPT_DIR / "awid3"  # ml/dataset/awid3/
-OUTPUT_FILE = SCRIPT_DIR.parent / "training" / "awid3_evil_twin_features.csv"  # ml/training/
-
-SSID_CANDIDATES = ["wlan.ssid", "ssid", "wlan_mgt.ssid", "dot11.wlan.ssid"]
-BSSID_CANDIDATES = ["wlan.sa", "wlan.bssid", "bssid", "wlan.ta", "dot11.wlan.sa"]
-RSSI_CANDIDATES = ["radiotap.dbm_antsignal", "wlan_radio.signal_dbm", "rssi", "signal_dbm"]
-FREQ_CANDIDATES = ["radiotap.channel.freq", "wlan_radio.channel.freq", "channel_freq", "channel"]
-WPA_CANDIDATES = ["wlan_mgt.rsn.akms", "wlan.rsn.akms", "akms", "wlan.rsn.version"]
-WEP_CANDIDATES = ["wlan_mgt.fixed.capabilities.privacy", "wlan.fc.protected"]
-
-
-def find_column(headers, candidates):
-    lower_headers = [h.lower().strip() for h in headers]
-    for c in candidates:
-        for i, h in enumerate(lower_headers):
-            if c.lower() in h:
-                return headers[i]
-    return None
+SCRIPT_DIR = Path(__file__).parent
+DATASET_DIR = SCRIPT_DIR / "awid3"
+OUTPUT_FILE = SCRIPT_DIR.parent / "training" / "awid3_evil_twin_features.csv"
 
 
 def normalized_edit_distance(a, b):
@@ -80,7 +58,7 @@ def oui_prefix(bssid):
 
 def freq_to_band(freq):
     try:
-        f = int(freq)
+        f = int(float(freq))
     except (ValueError, TypeError):
         return "unknown"
     if 2400 <= f <= 2500:
@@ -92,94 +70,77 @@ def freq_to_band(freq):
     return "unknown"
 
 
-def encryption_score(row, caps_col, wep_col):
-    caps_val = str(row.get(caps_col, "")).upper() if caps_col else ""
-    wep_val = str(row.get(wep_col, "")).strip() if wep_col else ""
-
-    if "SAE" in caps_val or "OWE" in caps_val:
-        return 1.0
-    if "WPA2" in caps_val or "RSN" in caps_val:
-        if "TKIP" in caps_val:
-            return 0.50
-        return 0.75
-    if "WPA-" in caps_val and "WPA2" not in caps_val:
-        return 0.30
-    if "WEP" in caps_val:
-        return 0.10
-    if wep_val in ("1", "true", "True"):
-        return 0.10
-    return 0.0
-
-
 def parse_csv_file(filepath):
-    packets_by_bssid = defaultdict(list)
+    """Parse a single AWID3 CSV file. Returns dict of bssid -> ap_info."""
+    aps = {}
     print(f"  Parsing {filepath.name}...")
 
-    try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            reader = csv.DictReader(f)
-            if reader.fieldnames is None:
-                print(f"  WARNING: Empty or unreadable file {filepath.name}")
-                return packets_by_bssid
+    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        reader = csv.DictReader(f)
 
-            headers = list(reader.fieldnames)
-            ssid_col = find_column(headers, SSID_CANDIDATES)
-            bssid_col = find_column(headers, BSSID_CANDIDATES)
-            rssi_col = find_column(headers, RSSI_CANDIDATES)
-            freq_col = find_column(headers, FREQ_CANDIDATES)
-            caps_col = find_column(headers, WPA_CANDIDATES)
-            wep_col = find_column(headers, WEP_CANDIDATES)
+        for row in reader:
+            # Use wlan.sa (source address) not wlan.bssid — in beacon/probe frames
+            # wlan.bssid only shows one AP, but wlan.sa shows the actual transmitter
+            bssid = (row.get("wlan.sa") or row.get("wlan.bssid") or "").strip()
+            if not bssid or bssid in ("00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"):
+                continue
 
-            print(f"    Columns: ssid={ssid_col}, bssid={bssid_col}, rssi={rssi_col}, "
-                  f"freq={freq_col}, caps={caps_col}")
+            ssid = (row.get("wlan.ssid") or "").strip()
 
-            if not bssid_col:
-                print(f"  ERROR: No BSSID column found in {filepath.name}")
-                print(f"    Available columns: {headers[:20]}...")
-                return packets_by_bssid
+            try:
+                rssi = float(row.get("radiotap.dbm_antsignal") or
+                             row.get("wlan_radio.signal_dbm") or "-70")
+            except (ValueError, TypeError):
+                rssi = -70
 
-            count = 0
-            for row in reader:
-                bssid = row.get(bssid_col, "").strip()
-                if not bssid or bssid == "00:00:00:00:00:00":
-                    continue
+            try:
+                freq = int(float(row.get("wlan_radio.frequency") or
+                                 row.get("radiotap.channel.freq") or "2412"))
+            except (ValueError, TypeError):
+                freq = 2412
 
-                ssid = row.get(ssid_col, "").strip() if ssid_col else ""
-                try:
-                    rssi = int(float(row.get(rssi_col, "-70") or "-70"))
-                except (ValueError, TypeError):
-                    rssi = -70
-                freq = row.get(freq_col, "2412") if freq_col else "2412"
-                enc_score = encryption_score(row, caps_col, wep_col)
+            protected = (row.get("wlan.fc.protected") or "0").strip()
+            ess = (row.get("wlan.fixed.capabilities.ess") or "0").strip()
+            subtype = (row.get("wlan.fc.subtype") or "").strip()
 
-                packets_by_bssid[bssid].append({
-                    "ssid": ssid,
-                    "rssi": rssi,
-                    "frequencyMhz": freq,
-                    "encryptionScore": enc_score,
-                })
-                count += 1
+            if bssid not in aps:
+                aps[bssid] = {
+                    "bssid": bssid,
+                    "ssids": set(),
+                    "rssi_values": [],
+                    "freq": freq,
+                    "protected_count": 0,
+                    "total_beacons": 0,
+                    "packet_count": 0,
+                }
 
-            print(f"    Read {count} packets, {len(packets_by_bssid)} unique BSSIDs")
-    except Exception as e:
-        print(f"  ERROR reading {filepath.name}: {e}")
+            ap = aps[bssid]
+            if ssid:
+                ap["ssids"].add(ssid)
+            ap["rssi_values"].append(rssi)
+            ap["packet_count"] += 1
+            if protected == "1":
+                ap["protected_count"] += 1
+            if ess == "1" or subtype == "8":  # beacon frame subtype
+                ap["total_beacons"] += 1
 
-    return packets_by_bssid
+    print(f"    Found {len(aps)} unique BSSIDs")
+    return aps
 
 
-def aggregate_ap(packets):
-    ssid = packets[0]["ssid"]
-    rssi_values = [p["rssi"] for p in packets]
-    freq = packets[0]["frequencyMhz"]
-    enc_scores = [p["encryptionScore"] for p in packets]
+def estimate_encryption_score(ap):
+    """Estimate encryption score from packet-level flags."""
+    total = max(ap["packet_count"], 1)
+    protected_ratio = ap["protected_count"] / total
 
-    return {
-        "ssid": ssid,
-        "meanRssi": sum(rssi_values) / len(rssi_values) if rssi_values else -70,
-        "frequencyMhz": freq,
-        "encryptionScore": max(set(enc_scores), key=enc_scores.count),
-        "packetCount": len(packets),
-    }
+    if protected_ratio > 0.8:
+        return 0.75  # WPA2-PSK equivalent
+    elif protected_ratio > 0.5:
+        return 0.50  # WPA2-TKIP or mixed
+    elif protected_ratio > 0.1:
+        return 0.30  # WPA1
+    else:
+        return 0.0   # Open network
 
 
 def build_pair_features(ap_a, ap_b):
@@ -188,10 +149,17 @@ def build_pair_features(ap_a, ap_b):
 
     bssid_sim = normalized_edit_distance(mac_a, mac_b)
     oui_match = 1.0 if oui_prefix(ap_a["bssid"]) == oui_prefix(ap_b["bssid"]) else 0.0
-    enc_delta = abs(ap_a["encryptionScore"] - ap_b["encryptionScore"])
-    rssi_diff = abs(ap_a["meanRssi"] - ap_b["meanRssi"]) / 65.0
-    band_a = freq_to_band(ap_a["frequencyMhz"])
-    band_b = freq_to_band(ap_b["frequencyMhz"])
+
+    enc_a = estimate_encryption_score(ap_a)
+    enc_b = estimate_encryption_score(ap_b)
+    enc_delta = abs(enc_a - enc_b)
+
+    mean_rssi_a = np.mean(ap_a["rssi_values"]) if ap_a["rssi_values"] else -70
+    mean_rssi_b = np.mean(ap_b["rssi_values"]) if ap_b["rssi_values"] else -70
+    rssi_diff = abs(mean_rssi_a - mean_rssi_b) / 65.0
+
+    band_a = freq_to_band(ap_a["freq"])
+    band_b = freq_to_band(ap_b["freq"])
     band_mismatch = 0.0 if band_a == band_b else 1.0
 
     return [
@@ -207,65 +175,53 @@ def main():
     csv_files = sorted(DATASET_DIR.glob("*.csv"))
     if not csv_files:
         print(f"ERROR: No CSV files found in {DATASET_DIR}")
-        print(f"  Download AWID3 evil twin data first:")
-        print(f"    kaggle datasets download suumia/awid3-dataset -f Evil_Twin.csv "
-              f"-p {DATASET_DIR} --unzip")
+        print(f"  Download evil twin captures first:")
+        print(f'  kaggle datasets download suumia/awid3-dataset -f "CSV/12.Evil_Twin/Evil_Twin_0.csv" '
+              f'-p {DATASET_DIR} --unzip')
         sys.exit(1)
 
-    print(f"Found {len(csv_files)} CSV file(s) in {DATASET_DIR}")
-    all_bssid_packets = defaultdict(list)
+    print(f"Found {len(csv_files)} CSV files in {DATASET_DIR}")
 
+    all_aps = {}
     for csv_file in csv_files:
-        packets = parse_csv_file(csv_file)
-        for bssid, pkt_list in packets.items():
-            all_bssid_packets[bssid].extend(pkt_list)
+        file_aps = parse_csv_file(csv_file)
+        for bssid, ap_info in file_aps.items():
+            if bssid not in all_aps:
+                all_aps[bssid] = ap_info
+            else:
+                existing = all_aps[bssid]
+                existing["rssi_values"].extend(ap_info["rssi_values"])
+                existing["ssids"].update(ap_info["ssids"])
+                existing["protected_count"] += ap_info["protected_count"]
+                existing["total_beacons"] += ap_info["total_beacons"]
+                existing["packet_count"] += ap_info["packet_count"]
 
-    print(f"\nTotal unique BSSIDs across all files: {len(all_bssid_packets)}")
+    print(f"\nTotal unique BSSIDs across all files: {len(all_aps)}")
 
     aps_by_ssid = defaultdict(list)
-    for bssid, packets in all_bssid_packets.items():
-        ap = aggregate_ap(packets)
-        ap["bssid"] = bssid
-        aps_by_ssid[ap["ssid"]].append(ap)
+    for bssid, ap in all_aps.items():
+        for ssid in ap["ssids"]:
+            if ssid:
+                aps_by_ssid[ssid].append(ap)
 
-    multi_ap_ssids = {ssid: aps for ssid, aps in aps_by_ssid.items() if len(aps) >= 2}
-    print(f"SSIDs with 2+ APs (potential evil twin pairs): {len(multi_ap_ssids)}")
+    print(f"SSIDs with 2+ APs: {len(aps_by_ssid)}")
+    for ssid, aps in aps_by_ssid.items():
+        print(f"  '{ssid}': {len(aps)} APs -> {len(aps) * (len(aps) - 1) // 2} pairs")
 
-    features = []
-    for ssid, aps in multi_ap_ssids.items():
+    evil_twin_features = []
+    for ssid, aps in aps_by_ssid.items():
+        if len(aps) < 2:
+            continue
         for i in range(len(aps)):
             for j in range(i + 1, len(aps)):
                 feat = build_pair_features(aps[i], aps[j])
-                feat.append(1)
-                features.append(feat)
+                feat.append(1)  # evil twin label
+                evil_twin_features.append(feat)
 
-    if not features:
-        print("\nWARNING: No AP pairs found. Generating supplementary synthetic pairs...")
-        rng = np.random.default_rng(42)
-        for ssid, aps in aps_by_ssid.items():
-            if len(aps) == 1:
-                ap = aps[0]
-                synthetic_mac = ap["bssid"][:8] + ":AA:BB:CC"
-                feat = build_pair_features(
-                    ap,
-                    {
-                        "bssid": synthetic_mac,
-                        "meanRssi": ap["meanRssi"] + rng.normal(0, 3),
-                        "frequencyMhz": ap["frequencyMhz"],
-                        "encryptionScore": max(0, ap["encryptionScore"] - 0.3),
-                    }
-                )
-                feat.append(1)
-                features.append(feat)
-
-    print(f"Total feature vectors: {len(features)}")
-
-    if not features:
-        print("ERROR: No features extracted. Check your AWID3 CSV file format.")
-        sys.exit(1)
+    print(f"\nEvil twin feature vectors: {len(evil_twin_features)}")
 
     rng = np.random.default_rng(42)
-    n_legit = max(len(features) // 2, 100)
+    n_legit = max(len(evil_twin_features), 200)
     legit_features = []
     for _ in range(n_legit):
         bssid_sim = float(rng.beta(1.5, 8))
@@ -275,9 +231,10 @@ def main():
         band_mis = float(rng.binomial(1, 0.30))
         legit_features.append([bssid_sim, oui_match, enc_delta, rssi_diff, band_mis, 0])
 
-    all_features = features + legit_features
+    all_features = evil_twin_features + legit_features
     rng.shuffle(all_features)
 
+    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_FILE, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["bssid_similarity", "oui_match", "encryption_delta",
@@ -286,10 +243,9 @@ def main():
             writer.writerow([f"{v:.6f}" for v in row])
 
     print(f"\nSaved {len(all_features)} feature vectors to {OUTPUT_FILE}")
-    print(f"  Real AWID3 pairs: {len(features)}")
-    print(f"  Synthetic legitimate pairs: {len(n_legit)}")
-    print(f"  Total: {len(all_features)}")
-    print(f"\nRun: python 01_evil_twin_train.py")
+    print(f"  Evil twin (real AWID3): {len(evil_twin_features)}")
+    print(f"  Legitimate pairs (synthetic): {len(legit_features)}")
+    print(f"\nNext: cd ../training && python 01_evil_twin_train.py")
 
 
 if __name__ == "__main__":

@@ -106,8 +106,12 @@ def main():
             continue
 
         # Quantize
-        print(f"  Quantizing → {m['dst']}…")
-        quantize_dynamic(str(src_path), str(int8_path), weight_type=QuantType.QInt8)
+        print(f"  Quantizing -> {m['dst']}...")
+        try:
+            quantize_dynamic(str(src_path), str(int8_path), weight_type=QuantType.QInt8)
+        except Exception as e:
+            print(f"  Quantization failed ({e}), copying fp32 as fallback...")
+            shutil.copy2(src_path, int8_path)
 
         # Sizes
         fp32_kb = src_path.stat().st_size / 1024
