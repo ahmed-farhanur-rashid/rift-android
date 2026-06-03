@@ -11,8 +11,12 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import org.mockito.Mockito.*
+import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 
 /**
  * Tests for MoEGate:
@@ -33,12 +37,12 @@ class MoEGateTest {
     private lateinit var gate: MoEGate
 
     @Before fun setUp() {
-        evilTwinDetector    = mock(EvilTwinDetector::class.java)
-        riskScorer          = mock(RiskScorer::class.java)
-        interferencePredictor = mock(InterferencePredictor::class.java)
-        anomalyDetector     = mock(AnomalyDetector::class.java)
+        evilTwinDetector    = mock()
+        riskScorer          = mock()
+        interferencePredictor = mock()
+        anomalyDetector     = mock()
         rssiTracker         = RssiTracker()
-        ouiLookup           = mock(OuiLookup::class.java)
+        ouiLookup           = mock()
 
         gate = MoEGate(
             evilTwinDetector    = evilTwinDetector,
@@ -50,9 +54,9 @@ class MoEGateTest {
         )
 
         // Default stubs
-        `when`(riskScorer.scoreAll(any())).thenReturn(emptyList())
-        `when`(interferencePredictor.predict(any(), any())).thenReturn(null)
-        `when`(anomalyDetector.analyze(any())).thenReturn(null)
+        whenever(riskScorer.scoreAll(any())).thenReturn(emptyList())
+        whenever(interferencePredictor.predict(any(), anyOrNull())).thenReturn(null)
+        whenever(anomalyDetector.analyze(any())).thenReturn(null)
     }
 
     // ── Helper factories ──────────────────────────────────────────────────────
@@ -83,7 +87,7 @@ class MoEGateTest {
             ap("DD:EE:FF:00:00:02", "HomeNet"),  // duplicate SSID
             ap("AA:BB:CC:00:00:03", "GuestWifi")
         )
-        `when`(evilTwinDetector.analyze(readings)).thenReturn(null)
+        whenever(evilTwinDetector.analyze(readings)).thenReturn(null)
         gate.evaluate(readings)
         verify(evilTwinDetector).analyze(readings)
     }
@@ -119,7 +123,7 @@ class MoEGateTest {
     }
 
     @Test fun `anomaly result is null before baseline established`() = runTest {
-        `when`(anomalyDetector.analyze(any())).thenReturn(null)
+        whenever(anomalyDetector.analyze(any())).thenReturn(null)
         val readings = listOf(ap("AA:BB:CC:00:00:01", "Net"))
         val report = gate.evaluate(readings)
         assertNull(report.anomalyReport)
@@ -140,10 +144,10 @@ class MoEGateTest {
             ap("DD:EE:FF:00:00:02", "HomeNet")
         )
 
-        `when`(evilTwinDetector.analyze(readings)).thenReturn(evilTwin)
-        `when`(riskScorer.scoreAll(readings)).thenReturn(riskScores)
-        `when`(interferencePredictor.predict(any(), anyOrNull())).thenReturn(interference)
-        `when`(anomalyDetector.analyze(readings)).thenReturn(anomalies)
+        whenever(evilTwinDetector.analyze(readings)).thenReturn(evilTwin)
+        whenever(riskScorer.scoreAll(readings)).thenReturn(riskScores)
+        whenever(interferencePredictor.predict(any(), anyOrNull())).thenReturn(interference)
+        whenever(anomalyDetector.analyze(readings)).thenReturn(anomalies)
 
         val report = gate.evaluate(readings)
 
@@ -157,7 +161,7 @@ class MoEGateTest {
     // ── Risk level derivation ─────────────────────────────────────────────────
 
     @Test fun `SAFE when no experts report issues`() = runTest {
-        `when`(riskScorer.scoreAll(any())).thenReturn(listOf(
+        whenever(riskScorer.scoreAll(any())).thenReturn(listOf(
             RiskScore("AA:BB:CC", "Net", 0.1f, RiskReason.CLEAN)
         ))
         val report = gate.evaluate(listOf(ap("AA:BB:CC:00:00:01", "Net")))
@@ -169,7 +173,7 @@ class MoEGateTest {
             ap("AA:BB:CC:00:00:01", "HomeNet"),
             ap("DD:EE:FF:00:00:02", "HomeNet")
         )
-        `when`(evilTwinDetector.analyze(readings)).thenReturn(
+        whenever(evilTwinDetector.analyze(readings)).thenReturn(
             EvilTwinResult("HomeNet", 0.95f, listOf("AA:BB:CC", "DD:EE:FF"))
         )
         val report = gate.evaluate(readings)
@@ -177,7 +181,7 @@ class MoEGateTest {
     }
 
     @Test fun `CRITICAL when encryption downgrade anomaly detected`() = runTest {
-        `when`(anomalyDetector.analyze(any())).thenReturn(
+        whenever(anomalyDetector.analyze(any())).thenReturn(
             AnomalyReport(listOf(
                 Anomaly(AnomalyType.ENCRYPTION_DOWNGRADE, "AA:BB:CC", "Net", 0.9f, "Downgrade")
             ))
@@ -187,7 +191,7 @@ class MoEGateTest {
     }
 
     @Test fun `WARNING when any AP has risk score above 0 7`() = runTest {
-        `when`(riskScorer.scoreAll(any())).thenReturn(listOf(
+        whenever(riskScorer.scoreAll(any())).thenReturn(listOf(
             RiskScore("AA:BB:CC", "Net", 0.8f, RiskReason.OPEN_NETWORK)
         ))
         val report = gate.evaluate(listOf(ap("AA:BB:CC:00:00:01", "Net")))
@@ -195,7 +199,7 @@ class MoEGateTest {
     }
 
     @Test fun `CAUTION when high interference`() = runTest {
-        `when`(interferencePredictor.predict(any(), anyOrNull())).thenReturn(
+        whenever(interferencePredictor.predict(any(), anyOrNull())).thenReturn(
             InterferenceReport(InterferenceSeverity.HIGH, null, 1)
         )
         val report = gate.evaluate(listOf(ap("AA:BB:CC:00:00:01", "Net")))
@@ -203,7 +207,7 @@ class MoEGateTest {
     }
 
     @Test fun `CAUTION when any anomaly present`() = runTest {
-        `when`(anomalyDetector.analyze(any())).thenReturn(
+        whenever(anomalyDetector.analyze(any())).thenReturn(
             AnomalyReport(listOf(
                 Anomaly(AnomalyType.NEW_UNKNOWN_AP, "FF:EE:DD", "Unknown", 0.7f, "New AP")
             ))
@@ -215,10 +219,10 @@ class MoEGateTest {
     // ── Fault tolerance ───────────────────────────────────────────────────────
 
     @Test fun `expert exception does not propagate — report still assembled`() = runTest {
-        `when`(evilTwinDetector.analyze(any())).thenThrow(RuntimeException("ONNX session failed"))
-        `when`(riskScorer.scoreAll(any())).thenThrow(RuntimeException("model error"))
-        `when`(interferencePredictor.predict(any(), anyOrNull())).thenReturn(null)
-        `when`(anomalyDetector.analyze(any())).thenReturn(null)
+        whenever(evilTwinDetector.analyze(any())).thenThrow(RuntimeException("ONNX session failed"))
+        whenever(riskScorer.scoreAll(any())).thenThrow(RuntimeException("model error"))
+        whenever(interferencePredictor.predict(any(), anyOrNull())).thenReturn(null)
+        whenever(anomalyDetector.analyze(any())).thenReturn(null)
 
         val readings = listOf(
             ap("AA:BB:CC:00:00:01", "HomeNet"),

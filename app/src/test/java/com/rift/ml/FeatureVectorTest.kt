@@ -9,9 +9,9 @@ import com.rift.core.ml.RssiTracker
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.`when`
-import org.mockito.ArgumentMatchers.any
+import org.mockito.kotlin.any
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 /**
  * Verifies that all normalised feature values stay strictly in [0, 1].
@@ -29,8 +29,8 @@ class FeatureVectorTest {
     @Before fun setUp() {
         rssiTracker = RssiTracker()
         // OuiLookup is a final class — use Mockito mock instead of subclassing
-        ouiLookup = mock(OuiLookup::class.java)
-        `when`(ouiLookup.lookup(any())).thenReturn(null)
+        ouiLookup = mock()
+        whenever(ouiLookup.lookup(any())).thenReturn(null)
     }
 
     private fun buildReading(
