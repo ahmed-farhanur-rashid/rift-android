@@ -19,3 +19,18 @@ app/build/
 
 # Generated files
 app/src/main/assets/
+
+# Virtual environment
+venv/
+.venv/
+
+# AWID3 real dataset (academic use only — do not commit)
+ml/dataset/awid3/
+ml/training/awid3_*.csv
+
+# ML training artifacts
+ml/training/venv/
+ml/training/*.pkl
+ml/training/*.onnx
+ml/training/*.pt
+__pycache__/

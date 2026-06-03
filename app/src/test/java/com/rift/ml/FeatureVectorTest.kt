@@ -10,6 +10,8 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
+import org.mockito.ArgumentMatchers.any
 
 /**
  * Verifies that all normalised feature values stay strictly in [0, 1].
@@ -26,10 +28,9 @@ class FeatureVectorTest {
 
     @Before fun setUp() {
         rssiTracker = RssiTracker()
-        // OuiLookup requires context — use a simple stub that always returns null
-        ouiLookup = object : OuiLookup(mock(android.content.Context::class.java)) {
-            override fun lookup(bssid: String): String? = null
-        }
+        // OuiLookup is a final class — use Mockito mock instead of subclassing
+        ouiLookup = mock(OuiLookup::class.java)
+        `when`(ouiLookup.lookup(any())).thenReturn(null)
     }
 
     private fun buildReading(
