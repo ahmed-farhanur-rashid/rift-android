@@ -75,7 +75,7 @@ idx = rng.permutation(len(X))
 X, y = X[idx], y[idx]
 
 # ── AWID3 integration point ───────────────────────────────────────────────────
-awid3_path = Path("awid3_evil_twin_features.csv")
+awid3_path = Path(__file__).parent.parent / "dataset" / "awid3_evil_twin_features.csv"
 if awid3_path.exists():
     import pandas as pd
     df = pd.read_csv(awid3_path)
@@ -113,17 +113,22 @@ print(f"Accuracy: {accuracy:.4f}")
 if accuracy < 0.90:
     print("WARNING: accuracy < 90% target. Augment with AWID3 real data for production.")
 
+MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
 # ── Save sklearn checkpoint ───────────────────────────────────────────────────
-with open("evil_twin_detector.pkl", "wb") as f:
+pkl_path = MODELS_DIR / "evil_twin_detector.pkl"
+with open(pkl_path, "wb") as f:
     pickle.dump(clf, f)
-print("Saved: evil_twin_detector.pkl")
+print(f"Saved: {pkl_path}")
 
 # ── Export to ONNX ────────────────────────────────────────────────────────────
 initial_type = [("float_input", FloatTensorType([None, N_FEATURES]))]
 onnx_model = convert_sklearn(clf, initial_types=initial_type, target_opset=17)
 
-with open("evil_twin_detector.onnx", "wb") as f:
+onnx_path = MODELS_DIR / "evil_twin_detector.onnx"
+with open(onnx_path, "wb") as f:
     f.write(onnx_model.SerializeToString())
-print("Exported: evil_twin_detector.onnx")
-print(f"  Size: {Path('evil_twin_detector.onnx').stat().st_size / 1024:.1f} KB")
+print(f"Exported: {onnx_path}")
+print(f"  Size: {onnx_path.stat().st_size / 1024:.1f} KB")
 print("\nRun export_all.py to quantize → int8 and copy to app assets.")

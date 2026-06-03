@@ -4,6 +4,26 @@ This directory contains the training pipeline for RIFT's four on-device ML exper
 All inference runs locally on Android via ONNX Runtime Mobile (int8 quantized).
 **No model weights are trained on-device; the `.onnx` files are trained here and committed.**
 
+## Directory Structure
+
+```
+ml/
+├── dataset/              ← Datasets & feature converters
+│   ├── awid3/            ← Raw AWID3 CSV captures (gitignored)
+│   ├── awid3_to_features.py
+│   └── awid3_evil_twin_features.csv
+├── models/               ← Trained model artifacts (gitignored)
+│   ├── *.pkl             ← sklearn checkpoints
+│   ├── *.onnx            ← fp32 ONNX exports
+│   └── *.pt              ← PyTorch checkpoints
+└── training/             ← Training scripts (this folder)
+    ├── 01_evil_twin_train.py
+    ├── 02_risk_scorer_train.py
+    ├── 03_interference_train.py
+    ├── 04_anomaly_autoencoder_train.py
+    └── export_all.py
+```
+
 ## Setup
 
 ```bash
@@ -38,10 +58,9 @@ The evil twin detector uses synthetic data by default but significantly improves
 with real labeled data from the AWID3 dataset.
 
 1. Register at https://icsdweb.aegean.gr/awid/awid3 (free, academic use)
-2. Download the Evil Twin attack capture files
-3. Extract beacon-level features into `awid3_evil_twin_features.csv` with columns:
-   `bssid_similarity,oui_match,encryption_delta,rssi_diff,band_mismatch,label`
-4. Place in `ml/training/` — the script auto-detects and uses it
+2. Download Evil Twin capture files to `ml/dataset/awid3/`
+3. Run `python ml/dataset/awid3_to_features.py` to extract features
+4. The training script auto-detects and uses the generated CSV
 
 Without AWID3, accuracy on synthetic data is ~95% but real-world performance
 on unseen environments may be lower. The Kotlin fallback rule-based logic
@@ -56,10 +75,11 @@ python export_all.py
 ```
 
 This will:
-1. Quantize all `.onnx` files to int8 via `quantize_dynamic`
-2. Verify accuracy within tolerance (< 5% max delta vs fp32)
-3. Copy `_int8.onnx` files directly to `app/src/main/assets/models/`
-4. Print a size summary (target: < 800 KB total)
+1. Read `.onnx` files from `ml/models/`
+2. Quantize all to int8 via `quantize_dynamic`
+3. Verify accuracy within tolerance (< 5% max delta vs fp32)
+4. Save `_int8.onnx` files to `ml/models/` and copy to `app/src/main/assets/models/`
+5. Print a size summary (target: < 800 KB total)
 
 ## Asset Placement
 

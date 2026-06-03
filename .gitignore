@@ -17,17 +17,20 @@ release.keystore
 /build
 /app/build/
 
-# Virtual environment
+# Virtual environment & IDE-specific files
 venv/
 .venv/
+.vscode/
 
 # AWID3 raw dataset (academic use only — do not commit)
 /ml/dataset/awid3/
 
 # ML intermediate training artifacts (NOT the final models in assets/)
-/ml/training/awid3_*.csv
+/ml/models/*.pkl
+/ml/models/*.onnx
+/ml/models/*.onnx.data
+/ml/models/*.pt
 /ml/training/*.pkl
 /ml/training/*.onnx
-/ml/training/*.onnx.data
 /ml/training/*.pt
 __pycache__/

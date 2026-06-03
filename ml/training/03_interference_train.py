@@ -127,17 +127,22 @@ print(classification_report(y_test, y_pred, target_names=["LOW", "MEDIUM", "HIGH
 accuracy = (y_pred == y_test).mean()
 print(f"Accuracy: {accuracy:.4f}")
 
+MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
 # ── Save checkpoint ───────────────────────────────────────────────────────────
-with open("interference_predictor.pkl", "wb") as f:
+pkl_path = MODELS_DIR / "interference_predictor.pkl"
+with open(pkl_path, "wb") as f:
     pickle.dump(clf, f)
-print("Saved: interference_predictor.pkl")
+print(f"Saved: {pkl_path}")
 
 # ── Export to ONNX ────────────────────────────────────────────────────────────
 initial_type = [("float_input", FloatTensorType([None, N_FEATURES]))]
 onnx_model = convert_sklearn(clf, initial_types=initial_type, target_opset=17)
 
-with open("interference_predictor.onnx", "wb") as f:
+onnx_path = MODELS_DIR / "interference_predictor.onnx"
+with open(onnx_path, "wb") as f:
     f.write(onnx_model.SerializeToString())
-print("Exported: interference_predictor.onnx")
-print(f"  Size: {Path('interference_predictor.onnx').stat().st_size / 1024:.1f} KB")
+print(f"Exported: {onnx_path}")
+print(f"  Size: {onnx_path.stat().st_size / 1024:.1f} KB")
 print("\nRun export_all.py to quantize → int8 and copy to app assets.")

@@ -167,17 +167,22 @@ print(f"Separation ratio:             {ratio:.2f}x  (target ≥ 3x)")
 if ratio < 3.0:
     print("WARNING: separation ratio < 3x — consider more training epochs or stronger anomalies.")
 
+MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
 # ── Save PyTorch checkpoint ───────────────────────────────────────────────────
-torch.save(model.state_dict(), "anomaly_autoencoder.pt")
-print("Saved: anomaly_autoencoder.pt")
+pt_path = MODELS_DIR / "anomaly_autoencoder.pt"
+torch.save(model.state_dict(), pt_path)
+print(f"Saved: {pt_path}")
 
 # ── Export to ONNX ────────────────────────────────────────────────────────────
 model.eval()
 dummy_input = torch.zeros(1, N_FEATURES).to(DEVICE)
+onnx_path = MODELS_DIR / "anomaly_autoencoder.onnx"
 torch.onnx.export(
     model,
     dummy_input,
-    "anomaly_autoencoder.onnx",
+    str(onnx_path),
     input_names=["env_features"],
     output_names=["reconstruction"],
     dynamic_axes={
@@ -186,6 +191,6 @@ torch.onnx.export(
     },
     opset_version=17
 )
-print("Exported: anomaly_autoencoder.onnx")
-print(f"  Size: {Path('anomaly_autoencoder.onnx').stat().st_size / 1024:.1f} KB")
+print(f"Exported: {onnx_path}")
+print(f"  Size: {onnx_path.stat().st_size / 1024:.1f} KB")
 print("\nRun export_all.py to quantize → int8 and copy to app assets.")

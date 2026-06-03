@@ -28,6 +28,7 @@ except ImportError:
     sys.exit(1)
 
 TRAINING_DIR = Path(__file__).parent
+MODELS_DIR   = TRAINING_DIR.parent / "models"
 ASSETS_DIR   = TRAINING_DIR.parent.parent / "app" / "src" / "main" / "assets" / "models"
 
 MODELS = [
@@ -94,8 +95,8 @@ def main():
 
     all_ok = True
     for m in MODELS:
-        src_path = TRAINING_DIR / m["src"]
-        int8_path = TRAINING_DIR / m["dst"]
+        src_path = MODELS_DIR / m["src"]
+        int8_path = MODELS_DIR / m["dst"]
 
         print(f"{'─' * 60}")
         print(f"Processing: {m['src']}")
