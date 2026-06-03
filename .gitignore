@@ -1,5 +1,4 @@
 *.iml
-.gradle
 /local.properties
 /.idea/
 .DS_Store
@@ -21,6 +20,8 @@ release.keystore
 venv/
 .venv/
 .vscode/
+.kotlin/
+.gradle
 
 # AWID3 raw dataset (academic use only — do not commit)
 /ml/dataset/awid3/
