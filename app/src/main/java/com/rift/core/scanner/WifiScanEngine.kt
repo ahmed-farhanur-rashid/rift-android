@@ -122,12 +122,8 @@ class WifiScanEngine @Inject constructor(
             @Suppress("DEPRECATION")
             val wifiInfo = wifiManager.connectionInfo ?: return null
             val bssid = wifiInfo.bssid ?: return null
-            val ssid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                wifiInfo.wifiSsid?.toString()?.trim('"') ?: ""
-            } else {
-                @Suppress("DEPRECATION")
-                wifiInfo.ssid?.trim('"') ?: ""
-            }
+            @Suppress("DEPRECATION")
+            val ssid = wifiInfo.ssid?.trim('"') ?: ""
             if (bssid.isBlank() || ssid.isBlank()) return null
             ConnectedWifi(
                 ssid = ssid,

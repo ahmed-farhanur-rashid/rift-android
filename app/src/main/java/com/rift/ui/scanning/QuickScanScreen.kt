@@ -350,9 +350,9 @@ private fun ThreatReportCard(report: ThreatReport) {
                 icon = Icons.Default.Warning,
                 label = "Evil Twin",
                 value = report.evilTwinResult?.let {
-                    if (it.detected) "Detected (${(it.confidence * 100).toInt()}%)" else "None detected"
-                } ?: "Skipped",
-                color = if (report.evilTwinResult?.detected == true) SignalVeryPoor else SignalExcellent
+                    "Detected (${(it.confidence * 100).toInt()}%)"
+                } ?: "None detected",
+                color = if (report.evilTwinResult != null) SignalVeryPoor else SignalExcellent
             )
 
             // Risk Scores

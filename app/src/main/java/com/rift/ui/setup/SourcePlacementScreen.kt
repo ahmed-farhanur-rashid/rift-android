@@ -315,8 +315,16 @@ private fun SourceDialog(
                     val tx = txPower.toFloatOrNull() ?: 23f
                     val freq = frequency.toIntOrNull() ?: 2400
                     onConfirm(
-                        (source ?: WifiSource(sessionId = "", bssid = "")).copy(
+                        source?.copy(
                             name = name,
+                            transmitPowerDbm = tx,
+                            frequencyMhz = freq
+                        ) ?: WifiSource(
+                            sessionId = source?.sessionId ?: "",
+                            name = name,
+                            bssid = source?.bssid ?: "",
+                            xMeters = source?.xMeters ?: 0f,
+                            yMeters = source?.yMeters ?: 0f,
                             transmitPowerDbm = tx,
                             frequencyMhz = freq
                         )
