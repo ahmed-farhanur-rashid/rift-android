@@ -38,3 +38,7 @@ venv/
 /ml/training/*.onnx
 /ml/training/*.pt
 __pycache__/
+
+# Signing info
+release.txt
+release_clean.txt
