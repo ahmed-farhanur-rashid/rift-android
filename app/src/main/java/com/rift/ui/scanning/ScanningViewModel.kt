@@ -5,11 +5,13 @@ import android.graphics.Bitmap
 import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rift.core.data.ApReading
 import com.rift.core.data.ScanDataPoint
 import com.rift.core.data.SessionEntity
 import com.rift.core.data.SessionRepository
 import com.rift.core.ml.MoEGate
 import com.rift.core.ml.ThreatReport
+import com.rift.core.ml.experts.AnomalyDetector
 import com.rift.core.positioning.HeatmapRenderer
 import com.rift.core.positioning.PdrEngine
 import com.rift.core.scanner.ScanForegroundService
@@ -40,7 +42,12 @@ data class ScanningUiState(
     val heatmapHeight: Int = 0,
     // ML threat analysis — updated each scan cycle
     val threatReport: ThreatReport? = null,
-    val showThreatPanel: Boolean = false
+    val showThreatPanel: Boolean = false,
+    // WiFi network filtering
+    val availableNetworks: List<ApReading> = emptyList(),
+    val selectedBssids: Set<String> = emptySet(),
+    val showWifiPicker: Boolean = false,
+    val connectedBssid: String? = null
 )
 
 @HiltViewModel
@@ -50,6 +57,7 @@ class ScanningViewModel @Inject constructor(
     private val pdrEngine: PdrEngine,
     private val heatmapRenderer: HeatmapRenderer,
     private val moeGate: MoEGate,
+    private val anomalyDetector: AnomalyDetector,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -90,6 +98,41 @@ class ScanningViewModel @Inject constructor(
         _uiState.update { it.copy(showThreatPanel = false) }
     }
 
+    // ── WiFi Network Selection ──────────────────────────────────────────────
+
+    fun toggleWifiPicker() {
+        _uiState.update { it.copy(showWifiPicker = !it.showWifiPicker) }
+    }
+
+    fun dismissWifiPicker() {
+        _uiState.update { it.copy(showWifiPicker = false) }
+    }
+
+    fun toggleBssidFilter(bssid: String) {
+        _uiState.update { state ->
+            val newSelected = if (bssid in state.selectedBssids) {
+                state.selectedBssids - bssid
+            } else {
+                state.selectedBssids + bssid
+            }
+            state.copy(selectedBssids = newSelected)
+        }
+    }
+
+    fun selectAllNetworks() {
+        val allBssids = _uiState.value.availableNetworks.map { it.bssid }.toSet()
+        _uiState.update { it.copy(selectedBssids = allBssids) }
+    }
+
+    fun clearAllNetworks() {
+        _uiState.update { it.copy(selectedBssids = emptySet()) }
+    }
+
+    fun selectMyNetwork() {
+        val connected = _uiState.value.connectedBssid ?: return
+        _uiState.update { it.copy(selectedBssids = setOf(connected)) }
+    }
+
     fun startScanning() {
         val sid = sessionId ?: return
         val session = _uiState.value.session ?: return
@@ -107,14 +150,28 @@ class ScanningViewModel @Inject constructor(
         )
         pdrEngine.start()
 
+        // Reset anomaly detector baseline for new session
+        anomalyDetector.resetBaseline()
+
         startTime = System.currentTimeMillis()
         _uiState.update { it.copy(isScanning = true, statusMessage = "Walk normally…") }
 
         // ── WiFi scan loop ────────────────────────────────────────────────────
         scanJob = viewModelScope.launch {
-            wifiScanEngine.scanResultsFlow().collect { readings ->
+            wifiScanEngine.scanResultsFlow().collect { allReadings ->
                 val pdr = pdrEngine.pdrState.value
                 val (xPx, yPx) = metersToPixels(pdr.x, pdr.y, session.originX, session.originY)
+
+                // Track connected BSSID
+                val connectedBssid = wifiScanEngine.getConnectedBssid()
+
+                // Determine which readings to use based on filter
+                val state = _uiState.value
+                val filteredReadings = if (state.selectedBssids.isEmpty()) {
+                    allReadings
+                } else {
+                    allReadings.filter { it.bssid in state.selectedBssids }
+                }
 
                 val dataPoint = ScanDataPoint(
                     xMeters = pdr.x,
@@ -123,28 +180,29 @@ class ScanningViewModel @Inject constructor(
                     yPixels = yPx,
                     timestamp = System.currentTimeMillis(),
                     confidence = pdr.confidence,
-                    readings = readings
+                    readings = filteredReadings
                 )
 
                 val scanPointId = sessionRepository.saveScanDataPoint(sid, dataPoint)
 
-                _uiState.update { state ->
-                    state.copy(
-                        scanPoints = state.scanPoints + dataPoint,
+                _uiState.update { s ->
+                    s.copy(
+                        scanPoints = s.scanPoints + dataPoint,
                         currentPdrX = pdr.x,
                         currentPdrY = pdr.y,
                         currentConfidence = pdr.confidence,
                         stepCount = pdr.stepCount,
-                        visibleApCount = readings.size,
-                        statusMessage = "${state.scanPoints.size + 1} pts · ${readings.size} APs visible"
+                        visibleApCount = filteredReadings.size,
+                        availableNetworks = allReadings,
+                        connectedBssid = connectedBssid,
+                        statusMessage = "${s.scanPoints.size + 1} pts · ${filteredReadings.size} APs visible"
                     )
                 }
 
                 // ── MoE evaluation — runs on Default dispatcher, never blocks UI ──
                 viewModelScope.launch(Dispatchers.Default) {
                     try {
-                        val threat = moeGate.evaluate(readings)
-                        // Persist threat report linked to this scan point
+                        val threat = moeGate.evaluate(filteredReadings)
                         sessionRepository.saveThreatReport(scanPointId, threat)
                         _uiState.update { it.copy(threatReport = threat) }
                     } catch (e: Exception) {

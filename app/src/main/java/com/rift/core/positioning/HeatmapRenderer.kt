@@ -82,18 +82,24 @@ class HeatmapRenderer @Inject constructor() {
         height: Int,
         useRiskPalette: Boolean
     ): Bitmap {
+        // Bin points to reduce computation for large point sets
+        val binnedPoints = if (points.size > 100) binPoints(points, 20f) else points
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val pixels = IntArray(width)
-        val xs = FloatArray(points.size) { points[it].xPx }
-        val ys = FloatArray(points.size) { points[it].yPx }
-        val vals = FloatArray(points.size) { points[it].rssi }
-        val confs = FloatArray(points.size) { points[it].confidence }
+        val xs = FloatArray(binnedPoints.size) { binnedPoints[it].xPx }
+        val ys = FloatArray(binnedPoints.size) { binnedPoints[it].yPx }
+        val vals = FloatArray(binnedPoints.size) { binnedPoints[it].rssi }
+        val confs = FloatArray(binnedPoints.size) { binnedPoints[it].confidence }
+        val n = binnedPoints.size
+
+        // Pre-compute power values for performance
+        val powerCache = DoubleArray(n)
 
         for (py in 0 until height) {
             for (px in 0 until width) {
                 var weightedSum = 0.0
                 var weightSum = 0.0
-                for (i in points.indices) {
+                for (i in 0 until n) {
                     val dx = px - xs[i]
                     val dy = py - ys[i]
                     val distSq = (dx * dx + dy * dy).toDouble()

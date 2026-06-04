@@ -98,7 +98,13 @@ class RiskScorer @Inject constructor(
      * ml/training/02_risk_scorer_train.py
      */
     private fun ruleBasedScore(features: FloatArray): Float {
-        val (encScore, hasWps, usesTkip, vendorRisk, _, rssiVar, isHidden) = features
+        if (features.size < 7) return 0.5f
+        val encScore = features[0]
+        val hasWps = features[1]
+        val usesTkip = features[2]
+        val vendorRisk = features[3]
+        val rssiVar = features[5]
+        val isHidden = features[6]
         var base = 1.0f - encScore
         base += hasWps * 0.15f
         base += usesTkip * 0.10f

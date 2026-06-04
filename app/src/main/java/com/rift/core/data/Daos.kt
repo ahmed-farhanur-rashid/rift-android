@@ -68,3 +68,25 @@ interface ThreatReportDao {
     @Query("SELECT * FROM threat_reports WHERE scanPointId = :scanPointId LIMIT 1")
     suspend fun getThreatReportForPoint(scanPointId: Long): ThreatReportEntity?
 }
+
+@Dao
+interface WifiSourceDao {
+
+    @Query("SELECT * FROM wifi_sources WHERE sessionId = :sessionId")
+    suspend fun getSourcesForSession(sessionId: String): List<WifiSourceEntity>
+
+    @Query("SELECT * FROM wifi_sources WHERE sessionId = :sessionId")
+    fun observeSourcesForSession(sessionId: String): Flow<List<WifiSourceEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSource(source: WifiSourceEntity): Long
+
+    @Update
+    suspend fun updateSource(source: WifiSourceEntity)
+
+    @Query("DELETE FROM wifi_sources WHERE id = :id")
+    suspend fun deleteSource(id: Long)
+
+    @Query("DELETE FROM wifi_sources WHERE sessionId = :sessionId")
+    suspend fun deleteAllSourcesForSession(sessionId: String)
+}

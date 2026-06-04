@@ -8,9 +8,10 @@ import androidx.room.RoomDatabase
         SessionEntity::class,
         ScanPointEntity::class,
         ApReadingEntity::class,
-        ThreatReportEntity::class      // Added in schema version 2
+        ThreatReportEntity::class,
+        WifiSourceEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class RiftDatabase : RoomDatabase() {
@@ -18,4 +19,5 @@ abstract class RiftDatabase : RoomDatabase() {
     abstract fun scanPointDao(): ScanPointDao
     abstract fun apReadingDao(): ApReadingDao
     abstract fun threatReportDao(): ThreatReportDao
+    abstract fun wifiSourceDao(): WifiSourceDao
 }

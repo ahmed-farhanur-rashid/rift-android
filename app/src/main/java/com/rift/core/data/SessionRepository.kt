@@ -2,6 +2,7 @@ package com.rift.core.data
 
 import com.rift.core.ml.ThreatReport
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -11,7 +12,8 @@ class SessionRepository @Inject constructor(
     private val sessionDao: SessionDao,
     private val scanPointDao: ScanPointDao,
     private val apReadingDao: ApReadingDao,
-    private val threatReportDao: ThreatReportDao
+    private val threatReportDao: ThreatReportDao,
+    private val wifiSourceDao: WifiSourceDao
 ) {
 
     fun getAllSessions(): Flow<List<SessionEntity>> = sessionDao.getAllSessions()
@@ -134,4 +136,60 @@ class SessionRepository @Inject constructor(
 
     suspend fun getThreatReportsForSession(sessionId: String): List<ThreatReportEntity> =
         threatReportDao.getThreatReportsForSession(sessionId)
+
+    // ── WiFi Source CRUD ─────────────────────────────────────────────────────
+
+    suspend fun saveWifiSource(source: WifiSource): Long {
+        return wifiSourceDao.insertSource(
+            WifiSourceEntity(
+                sessionId = source.sessionId,
+                name = source.name,
+                bssid = source.bssid,
+                xMeters = source.xMeters,
+                yMeters = source.yMeters,
+                transmitPowerDbm = source.transmitPowerDbm,
+                frequencyMhz = source.frequencyMhz
+            )
+        )
+    }
+
+    suspend fun getWifiSources(sessionId: String): List<WifiSource> {
+        return wifiSourceDao.getSourcesForSession(sessionId).map { it.toDomain() }
+    }
+
+    fun observeWifiSources(sessionId: String): Flow<List<WifiSource>> {
+        return wifiSourceDao.observeSourcesForSession(sessionId).map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
+    suspend fun updateWifiSource(source: WifiSource) {
+        wifiSourceDao.updateSource(
+            WifiSourceEntity(
+                id = source.id,
+                sessionId = source.sessionId,
+                name = source.name,
+                bssid = source.bssid,
+                xMeters = source.xMeters,
+                yMeters = source.yMeters,
+                transmitPowerDbm = source.transmitPowerDbm,
+                frequencyMhz = source.frequencyMhz
+            )
+        )
+    }
+
+    suspend fun deleteWifiSource(id: Long) {
+        wifiSourceDao.deleteSource(id)
+    }
+
+    private fun WifiSourceEntity.toDomain() = WifiSource(
+        id = id,
+        sessionId = sessionId,
+        name = name,
+        bssid = bssid,
+        xMeters = xMeters,
+        yMeters = yMeters,
+        transmitPowerDbm = transmitPowerDbm,
+        frequencyMhz = frequencyMhz
+    )
 }

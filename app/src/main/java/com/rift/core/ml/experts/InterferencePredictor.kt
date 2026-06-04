@@ -61,7 +61,7 @@ class InterferencePredictor @Inject constructor(
 
         // Only surface result above threshold
         val severityScore = severityOrdinal.toFloat() / 3f
-        if (severityScore < INTERFERENCE_THRESHOLD && severity == InterferenceSeverity.LOW) return null
+        if (severityScore < INTERFERENCE_THRESHOLD) return null
 
         val worstOffender = findWorstOffender(readings, targetChannel)
         val recommended = findRecommendedChannel(readings)
@@ -103,7 +103,9 @@ class InterferencePredictor @Inject constructor(
             ((it + 95f) / 65f).coerceIn(0f, 1f)
         } ?: 0f
         val adjacentChannelCount = (adjacent.size / totalAps).coerceIn(0f, 1f)
-        val band = if (readings.first().band == WifiBand.GHZ_2_4) 0f else 1f
+        // Use majority vote for band detection
+        val band24Count = readings.count { it.band == WifiBand.GHZ_2_4 }
+        val band = if (band24Count > readings.size / 2) 0f else 1f
         val totalApCountNorm = (totalAps / 50f).coerceIn(0f, 1f)
 
         return floatArrayOf(

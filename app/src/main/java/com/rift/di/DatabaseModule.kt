@@ -6,6 +6,7 @@ import com.rift.core.data.ApReadingDao
 import com.rift.core.data.ScanPointDao
 import com.rift.core.data.SessionDao
 import com.rift.core.data.ThreatReportDao
+import com.rift.core.data.WifiSourceDao
 import com.rift.core.data.RiftDatabase
 import dagger.Module
 import dagger.Provides
@@ -41,4 +42,7 @@ object DatabaseModule {
 
     @Provides
     fun provideThreatReportDao(db: RiftDatabase): ThreatReportDao = db.threatReportDao()
+
+    @Provides
+    fun provideWifiSourceDao(db: RiftDatabase): WifiSourceDao = db.wifiSourceDao()
 }

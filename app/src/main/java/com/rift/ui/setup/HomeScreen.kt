@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -21,6 +22,7 @@ import com.rift.ui.theme.NeonCyan
 @Composable
 fun HomeScreen(
     onStartNewScan: () -> Unit,
+    onQuickScan: () -> Unit,
     onViewHistory: () -> Unit
 ) {
     Box(
@@ -101,6 +103,31 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Quick Threat Scan
+            OutlinedButton(
+                onClick = onQuickScan,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = NeonCyan
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Quick Threat Scan",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             // Secondary action
             OutlinedButton(
                 onClick = onViewHistory,
@@ -140,10 +167,10 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     listOf(
-                        "1. Upload or photo your floor plan",
-                        "2. Calibrate scale (tap two known points)",
-                        "3. Pocket your phone and walk normally",
-                        "4. Review the coverage heatmap"
+                        "Quick Scan — analyze WiFi threats instantly",
+                        "Full Scan — walk your space for coverage heatmap",
+                        "Floor plan optional — works with blank canvas",
+                        "Filter by specific networks during scan"
                     ).forEach { tip ->
                         Text(
                             text = tip,

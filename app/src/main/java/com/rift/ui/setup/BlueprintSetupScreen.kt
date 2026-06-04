@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,7 +79,8 @@ fun BlueprintSetupScreen(
                 SetupStep.CHOOSE_BLUEPRINT -> ChooseBlueprintStep(
                     sessionName = state.sessionName,
                     onSessionNameChange = viewModel::setSessionName,
-                    onPickFromGallery = { imagePickerLauncher.launch("image/*") }
+                    onPickFromGallery = { imagePickerLauncher.launch("image/*") },
+                    onSkip = viewModel::skipBlueprint
                 )
 
                 SetupStep.CALIBRATE_SCALE -> state.blueprintUri?.let { uri ->
@@ -94,13 +96,11 @@ fun BlueprintSetupScreen(
                     )
                 }
 
-                SetupStep.SET_ORIGIN -> state.blueprintUri?.let { uri ->
-                    SetOriginStep(
-                        blueprintUri = uri,
-                        originPoint = state.originPoint,
-                        onOriginSet = viewModel::setOriginPoint
-                    )
-                }
+                SetupStep.SET_ORIGIN -> SetOriginStep(
+                    blueprintUri = state.blueprintUri,
+                    originPoint = state.originPoint,
+                    onOriginSet = viewModel::setOriginPoint
+                )
 
                 SetupStep.CONFIRM -> ConfirmSetupStep(
                     state = state,
@@ -127,7 +127,8 @@ fun BlueprintSetupScreen(
 private fun ChooseBlueprintStep(
     sessionName: String,
     onSessionNameChange: (String) -> Unit,
-    onPickFromGallery: () -> Unit
+    onPickFromGallery: () -> Unit,
+    onSkip: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -136,7 +137,7 @@ private fun ChooseBlueprintStep(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Name your scan session and pick a floor plan image.",
+            text = "Name your scan session and optionally pick a floor plan image.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -151,7 +152,7 @@ private fun ChooseBlueprintStep(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text("Floor Plan Image", style = MaterialTheme.typography.titleMedium)
+        Text("Floor Plan Image (Optional)", style = MaterialTheme.typography.titleMedium)
 
         Button(
             onClick = onPickFromGallery,
@@ -163,17 +164,34 @@ private fun ChooseBlueprintStep(
             Text("Pick from Gallery")
         }
 
+        OutlinedButton(
+            onClick = onSkip,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Skip — Use Blank Canvas")
+        }
+
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         ) {
-            Text(
-                text = "💡 Tip: A top-down architectural floor plan works best. A hand-drawn sketch also works fine.",
-                modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = "No floor plan? No problem.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "You'll get a blank canvas heatmap showing signal strength as you walk. Add a floor plan later for overlay.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -268,7 +286,7 @@ private fun CalibrateScaleStep(
 
 @Composable
 private fun SetOriginStep(
-    blueprintUri: Uri,
+    blueprintUri: Uri?,
     originPoint: Pair<Float, Float>?,
     onOriginSet: (Float, Float) -> Unit
 ) {
@@ -281,18 +299,54 @@ private fun SetOriginStep(
         )
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            AsyncImage(
-                model = blueprintUri,
-                contentDescription = "Floor plan",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            onOriginSet(offset.x, offset.y)
+            if (blueprintUri != null) {
+                AsyncImage(
+                    model = blueprintUri,
+                    contentDescription = "Floor plan",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures { offset ->
+                                onOriginSet(offset.x, offset.y)
+                            }
+                        },
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                // Blank canvas with grid
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF1A1A2E))
+                        .pointerInput(Unit) {
+                            detectTapGestures { offset ->
+                                onOriginSet(offset.x, offset.y)
+                            }
                         }
-                    },
-                contentScale = ContentScale.Fit
-            )
+                ) {
+                    // Draw grid
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val gridSpacing = 50f
+                        val gridColor = Color.White.copy(alpha = 0.1f)
+                        var x = 0f
+                        while (x < size.width) {
+                            drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+                            x += gridSpacing
+                        }
+                        var y = 0f
+                        while (y < size.height) {
+                            drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+                            y += gridSpacing
+                        }
+                    }
+                    Text(
+                        "Blank Canvas Mode",
+                        modifier = Modifier.align(Alignment.Center),
+                        color = Color.White.copy(alpha = 0.3f),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+            }
 
             Canvas(modifier = Modifier.fillMaxSize()) {
                 originPoint?.let { (x, y) ->
@@ -325,7 +379,8 @@ private fun ConfirmSetupStep(
             style = MaterialTheme.typography.bodyLarge
         )
         Text(
-            text = "Scale: ${state.pixelsPerMeter.toInt()} px/m",
+            text = if (state.blueprintUri != null) "Scale: ${state.pixelsPerMeter.toInt()} px/m"
+                   else "Blank canvas mode — 1:1 scale",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

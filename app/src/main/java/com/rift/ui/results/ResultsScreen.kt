@@ -32,6 +32,7 @@ import androidx.compose.foundation.Image
 @Composable
 fun ResultsScreen(
     sessionId: String,
+    onPlaceSources: () -> Unit = {},
     onBack: () -> Unit,
     viewModel: ResultsViewModel = hiltViewModel()
 ) {
@@ -63,6 +64,10 @@ fun ResultsScreen(
                     }
                 },
                 actions = {
+                    // Place Sources button
+                    IconButton(onClick = onPlaceSources) {
+                        Icon(Icons.Default.AddLocation, "Place sources")
+                    }
                     IconButton(
                         onClick = viewModel::exportHeatmap,
                         enabled = !state.isExporting && state.heatmapBitmap != null

@@ -52,6 +52,17 @@ class BlueprintSetupViewModel @Inject constructor(
         }
     }
 
+    fun skipBlueprint() {
+        // Skip floor plan - use blank canvas mode with 1:1 pixel-to-meter ratio
+        _uiState.update {
+            it.copy(
+                blueprintUri = null,
+                pixelsPerMeter = 1f,
+                step = SetupStep.SET_ORIGIN
+            )
+        }
+    }
+
     fun setSessionName(name: String) {
         _uiState.update { it.copy(sessionName = name) }
     }
@@ -91,7 +102,6 @@ class BlueprintSetupViewModel @Inject constructor(
 
     fun createSession(onSuccess: (String) -> Unit) {
         val state = _uiState.value
-        val blueprintUri = state.blueprintUri ?: return
         val origin = state.originPoint ?: return
 
         _uiState.update { it.copy(isCreatingSession = true) }
@@ -100,7 +110,7 @@ class BlueprintSetupViewModel @Inject constructor(
             try {
                 val sessionId = sessionRepository.createSession(
                     name = state.sessionName,
-                    blueprintUri = blueprintUri.toString(),
+                    blueprintUri = state.blueprintUri?.toString() ?: "",
                     pixelsPerMeter = state.pixelsPerMeter,
                     originX = origin.first,
                     originY = origin.second

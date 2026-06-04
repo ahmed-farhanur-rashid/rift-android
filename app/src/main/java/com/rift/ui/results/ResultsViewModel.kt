@@ -80,7 +80,11 @@ class ResultsViewModel @Inject constructor(
             // Compute session-level risk scores in background
             viewModelScope.launch(Dispatchers.Default) {
                 try {
-                    val allReadings = points.flatMap { it.readings }.distinctBy { it.bssid }
+                    // Use latest RSSI per BSSID (last occurrence in time order)
+                    val allReadings = points.flatMap { it.readings }
+                        .groupBy { it.bssid }
+                        .mapValues { (_, readings) -> readings.last() }
+                        .values.toList()
                     val report = moeGate.evaluate(allReadings)
                     _uiState.update { it.copy(riskScores = report.riskScores) }
                 } catch (e: Exception) {

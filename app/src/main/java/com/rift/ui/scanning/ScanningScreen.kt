@@ -20,6 +20,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -41,6 +45,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.rift.core.data.ApReading
 import com.rift.core.data.ScanDataPoint
 import com.rift.core.ml.RiskLevel
 import com.rift.ui.theme.*
@@ -59,11 +64,14 @@ fun ScanningScreen(
     var anchorMode by remember { mutableStateOf(false) }
 
     val requiredPermissions = remember {
-        listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_WIFI_STATE,
-            Manifest.permission.ACTIVITY_RECOGNITION
-        )
+        buildList {
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            add(Manifest.permission.ACCESS_WIFI_STATE)
+            add(Manifest.permission.ACTIVITY_RECOGNITION)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+        }
     }
     val permissionsState = rememberMultiplePermissionsState(requiredPermissions)
 
@@ -99,6 +107,20 @@ fun ScanningScreen(
                     }
                 },
                 actions = {
+                    // WiFi filter button
+                    IconButton(
+                        onClick = { viewModel.toggleWifiPicker() },
+                        colors = if (state.showWifiPicker || state.selectedBssids.isNotEmpty())
+                            IconButtonDefaults.iconButtonColors(containerColor = NeonCyan.copy(alpha = 0.15f))
+                        else
+                            IconButtonDefaults.iconButtonColors()
+                    ) {
+                        Icon(
+                            Icons.Default.Wifi,
+                            "Filter networks",
+                            tint = if (state.selectedBssids.isNotEmpty()) NeonCyan else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     // Shield — opens ThreatPanel
                     IconButton(
                         onClick = { viewModel.toggleThreatPanel() },
@@ -143,10 +165,11 @@ fun ScanningScreen(
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .onSizeChanged { size -> viewModel.onViewSized(size.width, size.height) }
             ) {
-                // Layer 1: Blueprint
-                state.session?.blueprintUri?.let { uriStr ->
+                // Layer 1: Blueprint or blank canvas
+                val blueprintUri = state.session?.blueprintUri
+                if (!blueprintUri.isNullOrBlank()) {
                     AsyncImage(
-                        model = Uri.parse(uriStr),
+                        model = Uri.parse(blueprintUri),
                         contentDescription = "Floor plan",
                         modifier = Modifier
                             .fillMaxSize()
@@ -161,6 +184,36 @@ fun ScanningScreen(
                         contentScale = ContentScale.Fit,
                         alpha = 0.55f
                     )
+                } else {
+                    // Blank canvas with grid
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFF1A1A2E))
+                            .pointerInput(anchorMode) {
+                                detectTapGestures { offset ->
+                                    if (anchorMode) {
+                                        viewModel.applyAnchor(offset.x, offset.y)
+                                        anchorMode = false
+                                    }
+                                }
+                            }
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val gridSpacing = 50f
+                            val gridColor = Color.White.copy(alpha = 0.1f)
+                            var x = 0f
+                            while (x < size.width) {
+                                drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+                                x += gridSpacing
+                            }
+                            var y = 0f
+                            while (y < size.height) {
+                                drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+                                y += gridSpacing
+                            }
+                        }
+                    }
                 }
 
                 // Layer 2: Live heatmap
@@ -308,6 +361,20 @@ fun ScanningScreen(
             ThreatPanel(report = report, onDismiss = { viewModel.dismissThreatPanel() })
         }
     }
+
+    // WiFi network picker sheet
+    if (state.showWifiPicker) {
+        WifiPickerSheet(
+            availableNetworks = state.availableNetworks,
+            selectedBssids = state.selectedBssids,
+            connectedBssid = state.connectedBssid,
+            onToggle = { viewModel.toggleBssidFilter(it) },
+            onSelectAll = { viewModel.selectAllNetworks() },
+            onClearAll = { viewModel.clearAllNetworks() },
+            onSelectMyNetwork = { viewModel.selectMyNetwork() },
+            onDismiss = { viewModel.dismissWifiPicker() }
+        )
+    }
 }
 
 // ── Canvas helpers ────────────────────────────────────────────────────────────
@@ -383,11 +450,22 @@ private fun PermissionRequestScreen(onRequest: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         Text("Permissions Required", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "RIFT needs Location and Activity Recognition permissions to scan RF networks and track indoor position.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        val permissionReasons = buildList {
+            add("Location — required by Android to scan for WiFi networks")
+            add("WiFi State — read scan results and connected network info")
+            add("Activity Recognition — detect steps for indoor positioning")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                add("Nearby WiFi Devices (Android 13+) — required for WiFi scanning on modern devices")
+            }
+        }
+        permissionReasons.forEach { reason ->
+            Text(
+                text = "• $reason",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 2.dp)
+            )
+        }
         Spacer(Modifier.height(24.dp))
         Button(onClick = onRequest, modifier = Modifier.fillMaxWidth()) { Text("Grant Permissions") }
     }
@@ -397,4 +475,154 @@ private fun formatElapsed(seconds: Long): String {
     val m = TimeUnit.SECONDS.toMinutes(seconds)
     val s = seconds % 60
     return "%d:%02d".format(m, s)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WifiPickerSheet(
+    availableNetworks: List<ApReading>,
+    selectedBssids: Set<String>,
+    connectedBssid: String?,
+    onToggle: (String) -> Unit,
+    onSelectAll: () -> Unit,
+    onClearAll: () -> Unit,
+    onSelectMyNetwork: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                "Filter WiFi Networks",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Select which networks to include in threat analysis.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+
+            // Quick action buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onSelectMyNetwork,
+                    modifier = Modifier.weight(1f),
+                    enabled = connectedBssid != null
+                ) {
+                    Text("My Network", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(
+                    onClick = onSelectAll,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("All", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(
+                    onClick = onClearAll,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("None", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+
+            if (selectedBssids.isNotEmpty()) {
+                Text(
+                    "${selectedBssids.size} of ${availableNetworks.size} selected",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NeonCyan
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // Network list
+            if (availableNetworks.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No networks detected yet",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    items(availableNetworks) { network ->
+                        val isConnected = network.bssid == connectedBssid
+                        val isSelected = network.bssid in selectedBssids
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isSelected) NeonCyan.copy(alpha = 0.08f)
+                                    else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { onToggle(network.bssid) },
+                                colors = CheckboxDefaults.colors(checkedColor = NeonCyan)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = network.ssid.ifBlank { "[Hidden]" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isConnected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                    if (isConnected) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Surface(
+                                            color = NeonCyan.copy(alpha = 0.15f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                "Connected",
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = NeonCyan
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = network.bssid,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = "${network.rssi} dBm",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = rssiToColor(network.rssi)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

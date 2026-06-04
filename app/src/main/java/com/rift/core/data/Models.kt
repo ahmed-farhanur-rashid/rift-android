@@ -147,3 +147,37 @@ data class ThreatReportEntity(
     val interferenceLevel: String,   // InterferenceSeverity.name() or "NONE"
     val timestamp: Long
 )
+
+// ─── WiFi Source (for mesh/repeater placement) ─────────────────────────────
+
+data class WifiSource(
+    val id: Long = 0,
+    val sessionId: String,
+    val name: String,
+    val bssid: String,          // Optional: link to detected AP
+    val xMeters: Float,
+    val yMeters: Float,
+    val transmitPowerDbm: Float, // Typical AP: 20-30 dBm
+    val frequencyMhz: Int       // 2400, 5180, etc.
+)
+
+@Entity(
+    tableName = "wifi_sources",
+    foreignKeys = [ForeignKey(
+        entity = SessionEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["sessionId"],
+        onDelete = ForeignKey.CASCADE
+    )],
+    indices = [Index("sessionId")]
+)
+data class WifiSourceEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: String,
+    val name: String,
+    val bssid: String,
+    val xMeters: Float,
+    val yMeters: Float,
+    val transmitPowerDbm: Float,
+    val frequencyMhz: Int
+)
